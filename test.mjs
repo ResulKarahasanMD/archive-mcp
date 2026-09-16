@@ -37,6 +37,8 @@ await call("ia_search", { q: "collection:nasa AND mediatype:image", rows: 3, sor
 await call("ia_search", { q: 'creator:"Evliya Çelebi"', rows: 3, fields: ["title", "language", "subject"] }, /sonuç|Sonuç yok/);
 await call("ia_scrape", { q: "collection:nasa", totalOnly: true }, /Toplam: \d+/);
 await call("ia_scrape", { q: "collection:nasa", count: 100 }, /toplam, bu parça 100/);
+await call("ia_account", { user: "@kuran_mealleri_dip_notlu" }, /uploads: toplam \d+/);
+await call("ia_account", { user: "kuran_mealleri_dip_notlu", element: "favorites" }, /favorites: toplam \d+/);
 await call("ia_metadata", { identifier: "nasa" }, /\[nasa\]/);
 await call("ia_metadata", { identifier: "nasa", subpath: "metadata/title" }, /NASA/i);
 await call("ia_metadata", { identifier: "bu-oge-yok-xyz-123" }, /bulunamadı|Hata/);

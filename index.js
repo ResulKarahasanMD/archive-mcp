@@ -22,7 +22,7 @@ const URL_DESC = "Hedef adres; şema isteğe bağlı (ör. 'example.com' veya 'h
 // yıl → 1 Temmuz, yıl+ay → ayın 15'i olarak tamamlayıp dönemin içinden bir kopya hedefleriz.
 const padTs = (t) => !t ? t : t.length === 4 ? `${t}0701` : t.length === 6 ? `${t}15` : t;
 const fmtTs = (t) => t && t.length >= 8 ? `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}${t.length >= 14 ? ` ${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}` : ""}` : t;
-const kb = (n) => n == null ? "?" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const kb = (n) => n == null || Number.isNaN(n) ? "?" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 
 const server = new McpServer({ name: "archive", version: "0.1.0" });
 
@@ -173,12 +173,12 @@ function renderDocs(docs) {
     const one = (v) => Array.isArray(v) ? v.join("; ") : v;
     const bits = [d.title ? String(one(d.title)) : "(başlıksız)"];
     if (d.creator) bits.push(String(one(d.creator)));
-    if (d.date || d.year) bits.push(String(one(d.date || d.year)).slice(0, 10));
+    if (d.date || d.year || d.publicdate) bits.push(String(one(d.date || d.year || d.publicdate)).slice(0, 10));
     if (d.mediatype) bits.push(d.mediatype);
     if (d.language) bits.push(String(one(d.language)));
     if (d.downloads != null) bits.push(`${d.downloads} indirme`);
     if (d.item_size != null) bits.push(kb(Number(d.item_size)));
-    const extra = Object.entries(d).filter(([k]) => !["identifier", "title", "creator", "date", "year", "mediatype", "language", "downloads", "item_size"].includes(k))
+    const extra = Object.entries(d).filter(([k]) => !["identifier", "title", "creator", "date", "year", "publicdate", "mediatype", "language", "downloads", "item_size"].includes(k))
       .map(([k, v]) => `${k}: ${String(one(v)).slice(0, 300)}`);
     return `${i + 1}. [${d.identifier}] ${bits.join(" · ")}\n   ${IA}/details/${d.identifier}` + (extra.length ? "\n   " + extra.join("\n   ") : "");
   }).join("\n");
@@ -238,6 +238,40 @@ server.registerTool(
     if (a.totalOnly) return text(`Toplam: ${j.total} · q=${a.q}`);
     const items = j.items || [];
     return text(`${j.total} toplam, bu parça ${items.length} · q=${a.q}\n` + renderDocs(items) + (j.cursor ? `\n\n(devam: cursor=${j.cursor})` : "\n\n(son parça)"));
+  }),
+);
+
+/* ================= 6b) hesap sayfası: yüklemeler / beğeniler ================= */
+server.registerTool(
+  "ia_account",
+  {
+    title: "archive.org kullanıcı hesabı (yüklemeler, beğeniler)",
+    description:
+      "Bir archive.org kullanıcısının (@kullanici) yüklemelerini, beğenilerini (favorites), yorumlarını ya da koleksiyonlarını listeler; " +
+      "details/@kullanici/uploads sayfasının kullandığı services/search/beta/page_production uç noktasıdır (belgelenmemiş, site UI'si ile aynı). " +
+      "Beğeniler ayrıca ia_search ile 'collection:fav-<kullanici>' sorgusuyla da bulunur; yüklemeler yalnız buradan gelir.",
+    inputSchema: {
+      user: z.string().min(1).describe("Kullanıcı adı, '@' ile ya da olmadan (ör. '@kuran_mealleri_dip_notlu')"),
+      element: z.enum(["uploads", "favorites", "reviews", "collections", "web_archives", "lists"]).optional().describe("Varsayılan uploads"),
+      rows: z.number().int().min(1).max(100).optional().describe("Sayfa başına (varsayılan 50)"),
+      page: z.number().int().min(1).optional().describe("Sayfa (1'den)"),
+      sort: z.string().optional().describe("Sıralama, ör. 'publicdate:desc' (varsayılan), 'downloads:desc', 'titleSorter:asc'"),
+    },
+    annotations: READ_ONLY,
+  },
+  safe(async (a) => {
+    const user = "@" + a.user.replace(/^@/, "");
+    const el = a.element ?? "uploads";
+    const rows = a.rows ?? 50, page = a.page ?? 1;
+    const j = await getJson(buildUrl(IA, "/services/search/beta/page_production/", {
+      page_type: "account_details", page_target: user, page_elements: JSON.stringify([el]), hits_per_page: rows, page, sort: a.sort ?? "publicdate:desc",
+    }));
+    const hits = j?.response?.body?.page_elements?.[el]?.hits;
+    if (!hits) throw new IaError(`beklenmeyen yanıt (${user}/${el}): ${JSON.stringify(j).slice(0, 300)}`);
+    const docs = (hits.hits || []).map((h) => h.fields || {});
+    if (!docs.length) return text(`${user} · ${el}: kayıt yok${hits.total ? ` (toplam ${hits.total}, sayfa ${page} boş)` : ""}.`);
+    return text(`${user} · ${el}: toplam ${hits.total}, sayfa ${page} (${docs.length} gösteriliyor)\n` + renderDocs(docs) +
+      (hits.total > page * rows ? `\n\n(devam: page=${page + 1})` : ""));
   }),
 );
 

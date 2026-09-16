@@ -13,6 +13,7 @@ Kaynak belgeler: [Wayback API](https://archive.org/help/wayback_api.php) · [CDX
 | `wayback_save` | `web.archive.org/save/{url}` | **Yazar**: yeni kopya oluşturur |
 | `ia_search` | `archive.org/advancedsearch.php` | Lucene sorgusu, sayfalı (≤10 000) |
 | `ia_scrape` | `services/search/v1/scrape` | İmleçli derin tarama / yalnız sayım |
+| `ia_account` | `services/search/beta/page_production` (belgelenmemiş) | @kullanıcı yüklemeleri / beğenileri / yorumları |
 | `ia_metadata` | `archive.org/metadata/{id}[/alt yol]` | Öğe metadata'sı |
 | `ia_files` | `metadata/{id}/files` | Dosya listesi + indirme adresleri |
 | `ia_read_file` | `archive.org/download/{id}/{file}` | Metin dosyası (ör. `_djvu.txt` OCR) parça parça |
