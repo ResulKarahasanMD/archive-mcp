@@ -28,7 +28,8 @@ console.log(`${tools.length} araç: ${tools.map((t) => t.name).join(", ")}`);
 await call("wayback_available", { url: "example.com" }, /En yakın kopya/);
 await call("wayback_available", { url: "example.com", timestamp: "20060101" }, /2006-01/);
 // Not: example.com gibi devasa arşivli adreslerde from/to 30 sn+ sürer; collapse ise 2026-09-17 itibarıyla CDX'te 503 döndürüyor.
-await call("wayback_cdx", { url: "acikkuran.com", from: "2020", to: "2022", limit: 5 }, /kopya/);
+// from/to sorgusu 2026-09-17'de IA tarafında 30–56 sn ya da 503 veriyordu; yalnız CDX_RANGE=1 ile çalışır.
+if (process.env.CDX_RANGE) await call("wayback_cdx", { url: "acikkuran.com", from: "2020", to: "2022", limit: 5 }, /kopya/);
 await call("wayback_cdx", { url: "archive.org/about/", matchType: "prefix", limit: 3, filter: ["statuscode:200"] }, /kopya/);
 await call("wayback_fetch", { url: "example.com", timestamp: "2013", maxChars: 800 }, /Example Domain/);
 await call("wayback_fetch", { url: "example.com", raw: true, maxChars: 500 }, /<html/i);

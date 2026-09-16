@@ -23,7 +23,7 @@ Kaynak belgeler: [Wayback API](https://archive.org/help/wayback_api.php) · [CDX
 
 ## Bilinen sunucu tarafı sınırlar (2026-09-17 ölçüldü)
 - CDX `collapse=…` → anında 503 "Temporarily Offline". Sunucu bunu yeniden denemeden hemen bildirir.
-- CDX `from/to` çok kaptürlü adreslerde (example.com) ~34 sn; küçük sitelerde < 1 sn.
+- CDX `from/to` sorguları 30–56 sn sürüyor ya da aralıklı 503 veriyor (küçük sitelerde bile; curl ile 44 sn ölçüldü). `matchType=prefix` + `limit` sorguları < 1 sn. Sunucu bakım sayfasında bir kez yeniden dener, sonra açık hata döner. Testte bu vaka `CDX_RANGE=1` ile açılır.
 - Anonim Save Page Now hız sınırlıdır.
 
 ## Test

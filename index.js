@@ -73,7 +73,7 @@ server.registerTool(
     const limit = a.limit ?? 50;
     const params = { url: a.url, output: "json", matchType: a.matchType, from: a.from, to: a.to, filter: a.filter, collapse: a.collapse, limit: a.last ? -limit : limit, offset: a.offset, fl: a.fields?.join(",") };
     // CDX yoğun alan adlarında 30–45 sn sürebiliyor (2026-09-17 ölçüm); tek denemeye MCP sınırına (60 sn) kadar süre tanı.
-    const r = await fetchRaw(buildUrl(WB, "/cdx/search/cdx", params), { accept: "application/json", timeoutMs: 55000, deadlineMs: 56000, maxRetries: 0 });
+    const r = await fetchRaw(buildUrl(WB, "/cdx/search/cdx", params), { accept: "application/json", timeoutMs: 50000, deadlineMs: 56000, maxRetries: 1 });
     if (r.status >= 400) throw new IaError(`CDX HTTP ${r.status}: ${r.body.slice(0, 300)}`);
     if (!r.body.trim()) return text(`CDX sonucu boş: ${a.url}${a.matchType ? ` (${a.matchType})` : ""}. Süzgeçleri gevşetin ya da wayback_available ile en yakın kopyaya bakın.`);
     let rows; try { rows = JSON.parse(r.body); } catch { throw new IaError(`CDX JSON çözülemedi: ${r.body.slice(0, 200)}`); }
