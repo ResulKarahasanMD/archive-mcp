@@ -16,8 +16,11 @@ const safe = (fn) => async (args) => {
   catch (e) { return { isError: true, content: [{ type: "text", text: `Hata: ${e.message}` }] }; }
 };
 
-const TS_DESC = "Wayback zaman damgası, 1–14 hane YYYYMMDDhhmmss (ör. '2006', '20130919', '20130919044612').";
+const TS_DESC = "Wayback zaman damgası, 1–14 hane YYYYMMDDhhmmss (ör. '2006', '20130919', '20130919044612'). Yalnız yıl verilirse 1 Temmuz, yıl+ay verilirse ayın 15'i hedeflenir (en yakın kopya döner).";
 const URL_DESC = "Hedef adres; şema isteğe bağlı (ör. 'example.com' veya 'https://example.com/path').";
+// Wayback kısa damgayı (ör. "2021") dönemin BAŞINA yakın sayar ve önceki yıla kayabilir;
+// yıl → 1 Temmuz, yıl+ay → ayın 15'i olarak tamamlayıp dönemin içinden bir kopya hedefleriz.
+const padTs = (t) => !t ? t : t.length === 4 ? `${t}0701` : t.length === 6 ? `${t}15` : t;
 const fmtTs = (t) => t && t.length >= 8 ? `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}${t.length >= 14 ? ` ${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}` : ""}` : t;
 const kb = (n) => n == null ? "?" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 
@@ -35,7 +38,7 @@ server.registerTool(
     annotations: READ_ONLY,
   },
   safe(async (a) => {
-    const j = await getJson(buildUrl(IA, "/wayback/available", { url: a.url, timestamp: a.timestamp }));
+    const j = await getJson(buildUrl(IA, "/wayback/available", { url: a.url, timestamp: padTs(a.timestamp) }));
     const c = j?.archived_snapshots?.closest;
     if (!c) return text(`Arşivde kopya yok: ${a.url}${a.timestamp ? ` (istenen zaman: ${a.timestamp})` : ""}. wayback_save ile şimdi arşivlenebilir.`);
     return text([`URL: ${a.url}`, `En yakın kopya: ${fmtTs(c.timestamp)} (ts ${c.timestamp}) · HTTP ${c.status} · available=${c.available}`, `Arşiv adresi: ${c.url}`].join("\n"));
@@ -50,7 +53,8 @@ server.registerTool(
     description:
       "Wayback CDX sunucusundan bir URL'nin (ya da önek/alan adının) tüm kopyalarını listeler: zaman damgası, MIME, HTTP durumu, " +
       "özet (digest), boyut. Tarih aralığı, durum/MIME süzgeci, tekilleştirme (collapse) ve sayfalama destekler. " +
-      "Bir siteyi ne zaman değiştiğini bulmak için collapse='digest' (içerik değişince yeni satır) kullanın.",
+      "Yoğun arşivlenmiş alan adlarında (from/to ile) 30–45 sn sürebilir; küçük limit ve last=true tercih edin. " +
+      "collapse='digest' içerik değişimlerini süzer ama CDX sunucusu bu parametreye bazen 503 döndürür.",
     inputSchema: {
       url: z.string().describe(URL_DESC),
       matchType: z.enum(["exact", "prefix", "host", "domain"]).optional().describe("exact (varsayılan) · prefix: bu yolla başlayan tüm URL'ler · host: bu sunucudaki her şey · domain: alt alan adları dahil"),
@@ -68,7 +72,8 @@ server.registerTool(
   safe(async (a) => {
     const limit = a.limit ?? 50;
     const params = { url: a.url, output: "json", matchType: a.matchType, from: a.from, to: a.to, filter: a.filter, collapse: a.collapse, limit: a.last ? -limit : limit, offset: a.offset, fl: a.fields?.join(",") };
-    const r = await fetchRaw(buildUrl(WB, "/cdx/search/cdx", params), { accept: "application/json" });
+    // CDX yoğun alan adlarında 30–45 sn sürebiliyor (2026-09-17 ölçüm); tek denemeye MCP sınırına (60 sn) kadar süre tanı.
+    const r = await fetchRaw(buildUrl(WB, "/cdx/search/cdx", params), { accept: "application/json", timeoutMs: 55000, deadlineMs: 56000, maxRetries: 0 });
     if (r.status >= 400) throw new IaError(`CDX HTTP ${r.status}: ${r.body.slice(0, 300)}`);
     if (!r.body.trim()) return text(`CDX sonucu boş: ${a.url}${a.matchType ? ` (${a.matchType})` : ""}. Süzgeçleri gevşetin ya da wayback_available ile en yakın kopyaya bakın.`);
     let rows; try { rows = JSON.parse(r.body); } catch { throw new IaError(`CDX JSON çözülemedi: ${r.body.slice(0, 200)}`); }
@@ -111,7 +116,7 @@ server.registerTool(
     annotations: READ_ONLY,
   },
   safe(async (a) => {
-    const ts = a.timestamp || "2";
+    const ts = padTs(a.timestamp) || "2";
     const r = await fetchRaw(`${WB}/web/${ts}id_/${a.url}`, { accept: "*/*", maxBytes: 4 * 1024 * 1024 });
     if (r.status === 404) return text(`Arşivde kopya yok: ${a.url}${a.timestamp ? ` @ ${a.timestamp}` : ""}. wayback_available / wayback_cdx ile kontrol edin.`);
     if (r.status >= 400) throw new IaError(`Wayback HTTP ${r.status}: ${r.body.slice(0, 200)}`);
@@ -119,7 +124,17 @@ server.registerTool(
     const actualTs = m?.[1];
     const ctype = r.headers.get("content-type") || "";
     const isHtml = /html|xml/i.test(ctype) || /^\s*<(!doctype|html)/i.test(r.body);
-    const full = a.raw || !isHtml ? r.body : htmlToText(r.body);
+    let full = a.raw || !isHtml ? r.body : htmlToText(r.body);
+    if (!a.raw && isHtml && full.length < 400) {
+      // İstemci tarafında çizilen uygulama (Next/React/Vue): sunucu HTML'i boş. Varsa gömülü veri bloğunu ekle.
+      const nd = /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i.exec(r.body)?.[1];
+      const nuxt = /window\.__NUXT__\s*=\s*([\s\S]*?)<\/script>/i.exec(r.body)?.[1];
+      full += "\n\n[Not: sunucu HTML'inde çok az metin var; sayfa büyük olasılıkla JavaScript ile çiziliyor (" +
+        (nd ? "Next.js" : nuxt ? "Nuxt" : /react|vue|angular|_next|webpack/i.test(r.body) ? "SPA" : "?") +
+        "). Arşiv kopyası yalnız iskeleti içerir; içerik için sayfanın çağırdığı API/JSON adreslerini wayback_cdx ile (matchType=prefix) arayın ya da raw=true ile ham HTML'e bakın.]";
+      if (nd) full += "\n__NEXT_DATA__: " + nd.slice(0, 3000);
+      if (nuxt) full += "\n__NUXT__: " + nuxt.slice(0, 3000);
+    }
     const off = a.offset ?? 0, max = a.maxChars ?? 20000;
     const slice = full.slice(off, off + max);
     const hdr = [`Arşiv: ${r.url}`, `Kopya zamanı: ${actualTs ? fmtTs(actualTs) : "?"} · içerik türü: ${ctype || "?"} · ${full.length} karakter${r.truncated ? " (4 MB'ta kesildi)" : ""}${off + max < full.length ? ` · devam için offset=${off + max}` : ""}`].join("\n");
