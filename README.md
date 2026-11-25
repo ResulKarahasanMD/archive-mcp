@@ -1,5 +1,8 @@
 # archive-mcp
 
+> **English summary.** A local MCP server (stdio) for the Internet Archive and the Wayback Machine: availability, CDX listing, snapshot fetch, item metadata and search. Read-only except `wayback_save` (Save Page Now).
+> The rest of this README is in Turkish.
+
 Internet Archive için yerel MCP sunucusu (stdio, Node ≥ 20, bağımlılık: `@modelcontextprotocol/sdk`, `zod`). Yalnız okuma yapar; tek istisna `wayback_save` (Save Page Now).
 
 Kaynak belgeler: [Wayback API](https://archive.org/help/wayback_api.php) · [CDX server](https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server) · [Metadata read](https://archive.org/developers/md-read.html) · [Search](https://archive.org/help/aboutsearch.htm) · [Bot kuralları](https://archive.org/developers/bots.html)
@@ -32,3 +35,7 @@ Kaynak belgeler: [Wayback API](https://archive.org/help/wayback_api.php) · [CDX
 npm test                 # canlı duman testi (ağ); SAVE=1 ile wayback_save de çalışır
 npm run test:lifecycle   # yetim süreç testi (ağ gerekmez)
 ```
+
+## Lisans
+
+[MIT](LICENSE).
